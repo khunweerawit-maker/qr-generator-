@@ -50,7 +50,9 @@ export default function QRGenerator() {
   const [fg, setFg] = useState("#0f172a");
   const [bg, setBg] = useState("#ffffff");
   const [ecl, setEcl] = useState<ECL>("M");
-  const [frameText, setFrameText] = useState("SCAN ME");
+  const [frameText, setFrameText] = useState("CS101 - SEC 1");
+  const [frameText2, setFrameText2] = useState("ภาคปกติ");
+  const [frameText3, setFrameText3] = useState("อ.สมชาย ใจดี");
   const [frameColor, setFrameColor] = useState("#ffffff");
   const [frameBg, setFrameBg] = useState("#a855f7");
   const [showFrame, setShowFrame] = useState(true);
@@ -64,7 +66,10 @@ export default function QRGenerator() {
   const drawComposite = useCallback(
     async (targetCanvas: HTMLCanvasElement, scale = 1) => {
       const padding = 20 * scale;
-      const frameH = showFrame && frameText.trim() ? 56 * scale : 0;
+      const activeTexts = [frameText, frameText2, frameText3].filter(t => t.trim());
+      const frameH = showFrame && activeTexts.length > 0 
+        ? (24 + activeTexts.length * 28) * scale 
+        : 0;
       const qrSize = QR_PX * scale;
       const W = qrSize + padding * 2;
       const H = qrSize + padding * 2 + frameH;
@@ -118,17 +123,31 @@ export default function QRGenerator() {
         ctx.fill();
 
         ctx.fillStyle = frameColor;
-        ctx.font = `bold ${22 * scale}px system-ui, -apple-system, Segoe UI, Roboto`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(
-          frameText.trim(),
-          W / 2,
-          qrSize + padding * 2 + frameH / 2,
-        );
+
+        const startY = qrSize + padding * 2;
+        activeTexts.forEach((text, index) => {
+          if (index === 0) {
+            ctx.font = `bold ${20 * scale}px system-ui, -apple-system, Segoe UI, Roboto`;
+          } else {
+            ctx.font = `bold ${16 * scale}px system-ui, -apple-system, Segoe UI, Roboto`;
+          }
+
+          let yOffset = 0;
+          if (activeTexts.length === 1) {
+            yOffset = 26;
+          } else if (activeTexts.length === 2) {
+            yOffset = index === 0 ? 25 : 55;
+          } else {
+            yOffset = index === 0 ? 24 : index === 1 ? 54 : 84;
+          }
+
+          ctx.fillText(text.trim(), W / 2, startY + yOffset * scale);
+        });
       }
     },
-    [bg, fg, ecl, payload, showFrame, frameText, frameColor, frameBg],
+    [bg, fg, ecl, payload, showFrame, frameText, frameText2, frameText3, frameColor, frameBg],
   );
 
   // Re-render preview on changes
@@ -164,17 +183,30 @@ export default function QRGenerator() {
     const qrVB = vbMatch ? parseInt(vbMatch[1], 10) : 33;
 
     const padding = 20;
-    const frameH = showFrame && frameText.trim() ? 56 : 0;
+    const activeTexts = [frameText, frameText2, frameText3].filter(t => t.trim());
+    const frameH = showFrame && activeTexts.length > 0 ? (24 + activeTexts.length * 28) : 0;
     const qrSize = QR_PX;
     const W = qrSize + padding * 2;
     const H = qrSize + padding * 2 + frameH;
     const scale = qrSize / qrVB;
 
-    const frameMarkup =
-      frameH > 0
-        ? `<rect x="${padding}" y="${qrSize + padding * 2 - 7}" width="${qrSize}" height="${frameH + 7}" rx="14" ry="14" fill="${frameBg}"/>
-<text x="${W / 2}" y="${qrSize + padding * 2 + frameH / 2}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-weight="700" font-size="22" fill="${frameColor}">${escapeXml(frameText.trim())}</text>`
-        : "";
+    let frameMarkup = "";
+    if (frameH > 0) {
+      frameMarkup += `<rect x="${padding}" y="${qrSize + padding * 2 - 7}" width="${qrSize}" height="${frameH + 7}" rx="14" ry="14" fill="${frameBg}"/>\n`;
+      activeTexts.forEach((text, index) => {
+        const fontSize = index === 0 ? 20 : 16;
+        let yOffset = 0;
+        if (activeTexts.length === 1) {
+          yOffset = 26;
+        } else if (activeTexts.length === 2) {
+          yOffset = index === 0 ? 25 : 55;
+        } else {
+          yOffset = index === 0 ? 24 : index === 1 ? 54 : 84;
+        }
+        const y = qrSize + padding * 2 + yOffset;
+        frameMarkup += `<text x="${W / 2}" y="${y}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-weight="700" font-size="${fontSize}" fill="${frameColor}">${escapeXml(text.trim())}</text>\n`;
+      });
+    }
 
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
@@ -190,7 +222,7 @@ ${frameMarkup}
     link.download = `qrcode-${Date.now()}.svg`;
     link.click();
     URL.revokeObjectURL(url);
-  }, [payload, ecl, fg, bg, showFrame, frameText, frameBg, frameColor]);
+  }, [payload, ecl, fg, bg, showFrame, frameText, frameText2, frameText3, frameBg, frameColor]);
 
   // ---------------- UI ----------------
   return (
@@ -263,15 +295,55 @@ ${frameMarkup}
               {showFrame ? "On" : "Off"}
             </label>
           </div>
-          <input
-            type="text"
-            value={frameText}
-            onChange={(e) => setFrameText(e.target.value)}
-            disabled={!showFrame}
-            maxLength={40}
-            placeholder="SCAN ME"
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-300 disabled:opacity-50"
-          />
+          
+          <div className="space-y-3">
+            <div>
+              <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                รหัสวิชา และ กลุ่มเรียน (บรรทัดที่ 1)
+              </span>
+              <input
+                type="text"
+                value={frameText}
+                onChange={(e) => setFrameText(e.target.value)}
+                disabled={!showFrame}
+                maxLength={40}
+                placeholder="เช่น CS101 - SEC 1"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-300 disabled:opacity-50"
+              />
+            </div>
+
+            <div>
+              <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                ประเภทการเรียน (บรรทัดที่ 2)
+              </span>
+              <select
+                value={frameText2}
+                onChange={(e) => setFrameText2(e.target.value)}
+                disabled={!showFrame}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-300 disabled:opacity-50"
+              >
+                <option value="ภาคปกติ">ภาคปกติ</option>
+                <option value="ภาควันอาทิตย์">ภาควันอาทิตย์</option>
+                <option value="">(ไม่แสดง)</option>
+              </select>
+            </div>
+
+            <div>
+              <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                ชื่อผู้สอน (บรรทัดที่ 3)
+              </span>
+              <input
+                type="text"
+                value={frameText3}
+                onChange={(e) => setFrameText3(e.target.value)}
+                disabled={!showFrame}
+                maxLength={40}
+                placeholder="เช่น อ.สมชาย ใจดี"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-300 disabled:opacity-50"
+              />
+            </div>
+          </div>
+
           <div className="mt-3 grid grid-cols-2 gap-3">
             <ColorField label="Frame BG" value={frameBg} onChange={setFrameBg} disabled={!showFrame} />
             <ColorField label="Frame Text" value={frameColor} onChange={setFrameColor} disabled={!showFrame} />
